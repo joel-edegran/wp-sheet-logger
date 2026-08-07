@@ -17,6 +17,21 @@ function log_update_to_google_sheet($upgrader_object, $options) {
 
     $type = $options['type'] ?? '';
     
+    // Log Core
+    if ($type === 'core') {
+        send_to_sheet($webhook_url, [
+            'site_name' => $site_name,
+            'date'      => current_time('Y-m-d'),
+            'platform'  => 'WP',
+            'action'    => 'Update',
+            'type'      => 'CMS',
+            'name'      => 'WordPress',
+            'note'      => '',
+            'from_value'=> '',
+            'to_value'  => $upgrader_object->result ?? ''
+        ]);
+    }
+    
     // Log Plugins
     if ($type === 'plugin' && !empty($options['plugins'])) {
         foreach ($options['plugins'] as $plugin_file) {
@@ -35,6 +50,24 @@ function log_update_to_google_sheet($upgrader_object, $options) {
         }
     }
     
+    // Log Themes
+    if ($type === 'theme' && !empty($options['themes'])) {
+        foreach ($options['themes'] as $theme_slug) {
+            $theme = wp_get_theme($theme_slug);
+            send_to_sheet($webhook_url, [
+                'site_name' => $site_name,
+                'date'      => current_time('Y-m-d'),
+                'platform'  => 'WP',
+                'action'    => 'Update',
+                'type'      => 'Theme',
+                'name'      => $theme->get('Name') ?: $theme_slug,
+                'note'      => '',
+                'from_value'=> '',
+                'to_value'  => $theme->get('Version') ?? ''
+            ]);
+        }
+    }
+    
     // Log Translation
     if ($type === 'translation') {
         foreach (($upgrader_object->result ?? []) as $translation) {
@@ -43,7 +76,7 @@ function log_update_to_google_sheet($upgrader_object, $options) {
                 'date'      => current_time('Y-m-d'),
                 'platform'  => 'WP',
                 'action'    => 'Update',
-                'type'      => 'Translations',
+                'type'      => 'Translation',
                 'name'      => $translation['name'] ?? 'Unknown',
                 'note'      => $translation['language'] ?? 'sv_SE',
                 'from_value'=> '',
