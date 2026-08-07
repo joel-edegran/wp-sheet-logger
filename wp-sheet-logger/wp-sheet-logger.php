@@ -4,11 +4,17 @@
  * Description: Logs updates to Google Sheets.
  */
 
+
+define('WP_SHEET_LOGGER_DEPLOYMENT_ID', 'YOUR_DEPLOYMENT_ID'); // Paste your Google Apps Script Deployment ID here
+
+define('WP_SHEET_LOGGER_WEB_APP_URL', 'https://script.google.com/macros/s/' . WP_SHEET_LOGGER_DEPLOYMENT_ID . '/exec');
+define('WP_SHEET_LOGGER_SITE_NAME', wp_parse_url(home_url(), PHP_URL_HOST)); // Automatically retrieves the domain name
+
 add_action('upgrader_process_complete', 'log_update_to_google_sheet', 10, 2);
 
 function log_update_to_google_sheet($upgrader_object, $options) {
-    $webhook_url = 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL'; // Paste your Web App URL here
-    $site_name   = 'dinsajt.se'; // Name of the site (must match the tab name exactly)
+    $webhook_url = WP_SHEET_LOGGER_WEB_APP_URL;
+    $site_name = WP_SHEET_LOGGER_SITE_NAME;
     
     if (($options['action'] ?? '') !== 'update') return;
 
