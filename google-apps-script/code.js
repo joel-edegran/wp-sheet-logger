@@ -2,26 +2,32 @@ function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var payload = JSON.parse(e.postData.contents);
   
-  // Find sheet based on the site name
-  var sheet = ss.getSheetByName(payload.site_name);
+  var sheetName = payload.site_name;
+  var sheet = ss.getSheetByName(sheetName);
   
-  // If the sheet does not exist, log to a sheet named "General"
+  // Create the sheet automatically if it does not exist
   if (!sheet) {
-    sheet = ss.getSheetByName('General');
+    sheet = ss.getSheetByName('Template'); // Optional: copy headers if a Template sheet exists, or just insert a blank one
+    if (sheet) {
+      sheet = sheet.copyTo(ss);
+      sheet.setName(sheetName);
+    } else {
+      sheet = ss.insertSheet(sheetName);
+      // Optional: Add header row if creating a completely blank sheet
+      sheet.appendRow(['DATE', 'PLATFORM', 'ACTION', 'TYPE', 'NAME', 'NOTE', 'FROM VALUE', 'TO VALUE']);
+    }
   }
   
-  if (sheet) {
-    sheet.appendRow([
-      payload.date,
-      payload.platform,
-      payload.action,
-      payload.type,
-      payload.name,
-      payload.note,
-      payload.from_value,
-      payload.to_value
-    ]);
-  }
+  sheet.appendRow([
+    payload.date,
+    payload.platform,
+    payload.action,
+    payload.type,
+    payload.name,
+    payload.note,
+    payload.from_value,
+    payload.to_value
+  ]);
   
   return ContentService.createTextOutput(JSON.stringify({"status": "success"}))
     .setMimeType(ContentService.MimeType.JSON);
