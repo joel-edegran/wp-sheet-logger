@@ -19,6 +19,16 @@ function log_update_to_google_sheet($upgrader_object, $options) {
     
     // Log Core
     if ($type === 'core') {
+        // Extract version safely if result is an object/array
+        $core_version = '';
+        if (is_string($upgrader_object->result)) {
+            $core_version = $upgrader_object->result;
+        } elseif (is_object($upgrader_object->result) && isset($upgrader_object->result->version)) {
+            $core_version = $upgrader_object->result->version;
+        } elseif (is_array($upgrader_object->result) && isset($upgrader_object->result['version'])) {
+            $core_version = $upgrader_object->result['version'];
+        }
+
         send_to_sheet($webhook_url, [
             'site_name' => $site_name,
             'date'      => current_time('Y-m-d'),
@@ -28,7 +38,7 @@ function log_update_to_google_sheet($upgrader_object, $options) {
             'name'      => 'WordPress',
             'note'      => '',
             'from_value'=> '',
-            'to_value'  => $upgrader_object->result ?? ''
+            'to_value'  => $core_version
         ]);
     }
     
@@ -82,7 +92,7 @@ function log_update_to_google_sheet($upgrader_object, $options) {
             // Determine a readable name
             $name = $slug;
             if ($trans_type === 'core') {
-                $name = 'WordPress Core';
+                $name = 'WordPress';
             } elseif ($trans_type === 'theme') {
                 $theme = wp_get_theme($slug);
                 $name = $theme->exists() ? $theme->get('Name') : $slug;
