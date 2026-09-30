@@ -69,18 +69,38 @@ function log_update_to_google_sheet($upgrader_object, $options) {
     }
     
     // Log Translation
-    if ($type === 'translation') {
-        foreach (($upgrader_object->result ?? []) as $translation) {
+    if ($type === 'translation' && !empty($options['translations'])) {
+        foreach ($options['translations'] as $translation) {
+            // Cast to array to safely access keys, as WP sometimes passes objects here
+            $trans = (array) $translation;
+            
+            $trans_type = $trans['type'] ?? 'Unknown';
+            $slug       = $trans['slug'] ?? 'Unknown';
+            $language   = $trans['language'] ?? 'sv_SE';
+            $version    = $trans['version'] ?? '';
+
+            // Determine a readable name
+            $name = $slug;
+            if ($trans_type === 'core') {
+                $name = 'WordPress Core';
+            } elseif ($trans_type === 'theme') {
+                $theme = wp_get_theme($slug);
+                $name = $theme->exists() ? $theme->get('Name') : $slug;
+            } elseif ($trans_type === 'plugin' && $slug !== 'Unknown') {
+                // Convert slugs like 'yoast-seo' to 'Yoast Seo'
+                $name = ucwords(str_replace('-', ' ', $slug));
+            }
+
             send_to_sheet($webhook_url, [
                 'site_name' => $site_name,
                 'date'      => current_time('Y-m-d'),
                 'platform'  => 'WP',
                 'action'    => 'Update',
                 'type'      => 'Translation',
-                'name'      => $translation['name'] ?? 'Unknown',
-                'note'      => $translation['language'] ?? 'sv_SE',
+                'name'      => $name,
+                'note'      => $language,
                 'from_value'=> '',
-                'to_value'  => ''
+                'to_value'  => $version
             ]);
         }
     }
