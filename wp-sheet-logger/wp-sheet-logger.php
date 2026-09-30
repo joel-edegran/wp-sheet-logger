@@ -65,6 +65,27 @@ add_action('switch_theme', function($new_name, $new_theme, $old_theme) {
     ]);
 }, 10, 3);
 
+// Log theme deletion
+add_action('deleted_theme', function($stylesheet, $deleted) {
+    if (!$deleted) {
+        return;
+    }
+    $webhook_url = WP_SHEET_LOGGER_WEB_APP_URL;
+    $site_name = wp_parse_url(home_url(), PHP_URL_HOST);
+
+    send_to_sheet($webhook_url, [
+        'site_name' => $site_name,
+        'date'      => current_time('Y-m-d'),
+        'platform'  => 'WP',
+        'action'    => 'Uninstall',
+        'type'      => 'Theme',
+        'name'      => ucwords(str_replace(['-', '_'], ' ', $stylesheet)),
+        'note'      => '',
+        'from_value'=> '',
+        'to_value'  => ''
+    ]);
+}, 10, 2);
+
 function log_update_to_google_sheet($upgrader_object, $options) {
     $webhook_url = WP_SHEET_LOGGER_WEB_APP_URL;
     $site_name = wp_parse_url(home_url(), PHP_URL_HOST);
@@ -74,42 +95,58 @@ function log_update_to_google_sheet($upgrader_object, $options) {
 
     // Handle new installations via upgrader
     if ($action === 'install') {
-        if ($type === 'plugin' && !empty($options['plugin'])) {
-            $plugin_file = $options['plugin'];
-            $data = get_plugin_data(WP_PLUGIN_DIR . '/' . $plugin_file);
-            send_to_sheet($webhook_url, [
-                'site_name' => $site_name,
-                'date'      => current_time('Y-m-d'),
-                'platform'  => 'WP',
-                'action'    => 'Install',
-                'type'      => 'Plugin',
-                'name'      => $data['Name'] ?? $plugin_file,
-                'note'      => '',
-                'from_value'=> '',
-                'to_value'  => $data['Version'] ?? ''
-            ]);
-        } elseif ($type === 'theme' && !empty($options['theme'])) {
-            $theme_slug = $options['theme'];
-            $theme = wp_get_theme($theme_slug);
-            send_to_sheet($webhook_url, [
-                'site_name' => $site_name,
-                'date'      => current_time('Y-m-d'),
-                'platform'  => 'WP',
-                'action'    => 'Install',
-                'type'      => 'Theme',
-                'name'      => $theme->get('Name') ?: $theme_slug,
-                'note'      => '',
-                'from_value'=> '',
-                'to_value'  => $theme->get('Version') ?? ''
-            ]);
+        if ($type === 'plugin') {
+            $plugin_file = $options['plugin'] ?? '';
+            if (empty($plugin_file) && isset($upgrader_object->result) && is_string($upgrader_object->result)) {
+                $plugin_file = $upgrader_object->result;
+            }
+            if (!empty($plugin_file)) {
+                $data = get_plugin_data(WP_PLUGIN_DIR . '/' . $plugin_file);
+                send_to_sheet($webhook_url, [
+                    'site_name' => $site_name,
+                    'date'      => current_time('Y-m-d'),
+                    'platform'  => 'WP',
+                    'action'    => 'Install',
+                    'type'      => 'Plugin',
+                    'name'      => $data['Name'] ?? $plugin_file,
+                    'note'      => '',
+                    'from_value'=> '',
+                    'to_value'  => $data['Version'] ?? ''
+                ]);
+            }
+        } elseif ($type === 'theme') {
+            $theme_slug = $options['theme'] ?? $options['stylesheet'] ?? '';
+            if (empty($theme_slug) && isset($upgrader_object->result)) {
+                if (is_string($upgrader_object->result)) {
+                    $theme_slug = $upgrader_object->result;
+                } elseif (is_array($upgrader_object->result) && isset($upgrader_object->result['destination_name'])) {
+                    $theme_slug = $upgrader_object->result['destination_name'];
+                }
+            }
+            if (!empty($theme_slug)) {
+                $theme = wp_get_theme($theme_slug);
+                send_to_sheet($webhook_url, [
+                    'site_name' => $site_name,
+                    'date'      => current_time('Y-m-d'),
+                    'platform'  => 'WP',
+                    'action'    => 'Install',
+                    'type'      => 'Theme',
+                    'name'      => $theme->exists() ? $theme->get('Name') : $theme_slug,
+                    'note'      => '',
+                    'from_value'=> '',
+                    'to_value'  => $theme->exists() ? $theme->get('Version') : ''
+                ]);
+            }
         }
         return;
     }
 
-    // Handle deletions / uninstalls via upgrader
+    // Handle deletions / uninstalls via upgrader (mainly plugins)
     if ($action === 'delete') {
-        if ($type === 'plugin' && !empty($options['plugins'])) {
-            foreach ($options['plugins'] as $plugin_file) {
+        if ($type === 'plugin') {
+            $plugins = $options['plugins'] ?? [$options['plugin'] ?? ''];
+            foreach ($plugins as $plugin_file) {
+                if (empty($plugin_file)) continue;
                 $full_path = WP_PLUGIN_DIR . '/' . $plugin_file;
                 $data = file_exists($full_path) ? get_plugin_data($full_path) : [];
                 $name = $data['Name'] ?? ucwords(str_replace(['-', '_', '/'], [' ', ' ', ' '], dirname($plugin_file)));
@@ -126,21 +163,6 @@ function log_update_to_google_sheet($upgrader_object, $options) {
                     'to_value'  => $data['Version'] ?? ''
                 ]);
             }
-        } elseif ($type === 'theme' && !empty($options['themes'])) {
-            foreach ($options['themes'] as $theme_slug) {
-                $theme = wp_get_theme($theme_slug);
-                send_to_sheet($webhook_url, [
-                    'site_name' => $site_name,
-                    'date'      => current_time('Y-m-d'),
-                    'platform'  => 'WP',
-                    'action'    => 'Uninstall',
-                    'type'      => 'Theme',
-                    'name'      => $theme->exists() ? $theme->get('Name') : $theme_slug,
-                    'note'      => '',
-                    'from_value'=> '',
-                    'to_value'  => $theme->get('Version') ?? ''
-                ]);
-            }
         }
         return;
     }
@@ -152,7 +174,6 @@ function log_update_to_google_sheet($upgrader_object, $options) {
 
     // Log Core
     if ($type === 'core') {
-        // Extract version safely if result is an object/array
         $core_version = '';
         if (is_string($upgrader_object->result)) {
             $core_version = $upgrader_object->result;
@@ -214,7 +235,6 @@ function log_update_to_google_sheet($upgrader_object, $options) {
     // Log Translation
     if ($type === 'translation' && !empty($options['translations'])) {
         foreach ($options['translations'] as $translation) {
-            // Cast to array to safely access keys, as WP sometimes passes objects here
             $trans = (array) $translation;
             
             $trans_type = $trans['type'] ?? 'Unknown';
@@ -222,7 +242,6 @@ function log_update_to_google_sheet($upgrader_object, $options) {
             $language   = $trans['language'] ?? 'sv_SE';
             $version    = $trans['version'] ?? '';
 
-            // Determine a readable name
             $name = $slug;
             if ($trans_type === 'core') {
                 $name = 'WordPress';
@@ -230,7 +249,6 @@ function log_update_to_google_sheet($upgrader_object, $options) {
                 $theme = wp_get_theme($slug);
                 $name = $theme->exists() ? $theme->get('Name') : $slug;
             } elseif ($trans_type === 'plugin' && $slug !== 'Unknown') {
-                // Convert slugs like 'yoast-seo' to 'Yoast Seo'
                 $name = ucwords(str_replace('-', ' ', $slug));
             }
 
